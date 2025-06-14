@@ -31,7 +31,13 @@ async function run() {
     res.send(courses)
     })
 
-    
+    // course-details data get
+    app.get('/course-details/:id', async(req, res) => {
+      const qurey = req.params
+      const courseDetails = {_id: new ObjectId(qurey)}
+      const result = await courseCollection.findOne(courseDetails)
+      res.send(result)
+    })
   
     // add course
   app.post('/add-course', async(req, res) => {
