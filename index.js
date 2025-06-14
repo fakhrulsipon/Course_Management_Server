@@ -2,7 +2,7 @@ require('dotenv').config()
 const express = require('express')
 const app = express()
 const cors = require('cors')
-const { MongoClient, ServerApiVersion } = require('mongodb');
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const port = process.env.PORT || 3000
 
 app.use(cors())
@@ -25,7 +25,15 @@ async function run() {
     await client.connect();
     const courseCollection = client.db("courseDB").collection("courses");
 
+    // get 6 latest course
+    app.get('/latest-course', async(req, res) => {
+    const courses = await courseCollection.find().sort({createdAt: -1 }).limit(6).toArray();
+    res.send(courses)
+    })
+
     
+  
+    // add course
   app.post('/add-course', async(req, res) => {
     const courseData = req.body
     const result = await courseCollection.insertOne(courseData)
