@@ -24,32 +24,52 @@ async function run() {
     // Connect the client to the server	(optional starting in v4.7)
     await client.connect();
     const courseCollection = client.db("courseDB").collection("courses");
+    const enrollmentCollection = client.db("courseDB").collection("enrollments");
 
     // get 6 latest course
-    app.get('/latest-course', async(req, res) => {
-    const courses = await courseCollection.find().sort({createdAt: -1 }).limit(6).toArray();
-    res.send(courses)
+    app.get('/latest-course', async (req, res) => {
+      const courses = await courseCollection.find().sort({ createdAt: -1 }).limit(6).toArray();
+      res.send(courses)
     })
 
     // course-details data get
-    app.get('/course-details/:id', async(req, res) => {
+    app.get('/course-details/:id', async (req, res) => {
       const qurey = req.params
-      const courseDetails = {_id: new ObjectId(qurey)}
+      const courseDetails = { _id: new ObjectId(qurey) }
       const result = await courseCollection.findOne(courseDetails)
       res.send(result)
     })
-  
+    
+
     // add course
-  app.post('/add-course', async(req, res) => {
-    const courseData = req.body
-    const result = await courseCollection.insertOne(courseData)
-    res.send(result)
-  })
+    app.post('/add-course', async (req, res) => {
+      const courseData = req.body
+      const result = await courseCollection.insertOne(courseData)
+      res.send(result)
+    })
+
+    // enroll course
+    app.post('/enroll', async (req, res) => {
+      const enrollmentData = req.body;
+
+      const exists = await enrollmentCollection.findOne({
+        email: enrollmentData.email,
+        courseId: enrollmentData.courseId
+      });
+
+      if (exists) {
+        return res.status(400).send({ message: 'Already Enrolled' });
+      }
+
+      const result = await enrollmentCollection.insertOne(enrollmentData);
+      res.send(result);
+    });
+
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
     console.log("Pinged your deployment. You successfully connected to MongoDB!");
   } finally {
-    
+
   }
 }
 run().catch(console.dir);
