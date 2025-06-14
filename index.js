@@ -40,6 +40,18 @@ async function run() {
       res.send(result)
     })
     
+    // check enroll part
+    app.get('/check-enroll', async (req, res) => {
+      const { email, courseId } = req.query;
+
+      if (!email || !courseId) {
+        return res.send({ enrolled: false });
+      }
+
+      const exists = await enrollmentCollection.findOne({ email, courseId });
+
+      res.send({ enrolled: exists ? true : false });
+    });
 
     // add course
     app.post('/add-course', async (req, res) => {
