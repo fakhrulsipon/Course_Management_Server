@@ -77,7 +77,7 @@ async function run() {
     });
 
 
-// my course section
+    // my course section
     app.get('/my-courses', async (req, res) => {
       const email = req.query.email;
 
@@ -89,6 +89,20 @@ async function run() {
       res.send(userCourses);
     });
 
+
+    // my enrolled courses
+    app.get('/enrolled-courses', async (req, res) => {
+      const email = req.query.email;
+      if (!email){
+        return res.status(400).send({ message: "Email required" });
+      }
+
+      const enrolledCourses = await enrollmentCollection.find({ email: email }).toArray();
+      
+      const courseIds = enrolledCourses.map(enroll => new ObjectId(enroll.courseId))
+      const courses = await courseCollection.find({_id: {$in: courseIds}}).toArray()
+      res.send(courses)
+    });
 
     // add course
     app.post('/add-course', async (req, res) => {
@@ -135,6 +149,15 @@ async function run() {
       const id = req.params.id
       const query = { _id: new ObjectId(id) }
       const result = await courseCollection.deleteOne(query)
+      res.send(result)
+    })
+
+    // Delete Enrolled
+    app.delete('/delete-enrolled/:id/:email', async (req, res) => {
+      const id = req.params.id
+      const email = req.params.email
+      const query = { courseId: id, email }
+      const result = await enrollmentCollection.deleteOne(query)
       res.send(result)
     })
 
