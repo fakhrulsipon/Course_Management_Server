@@ -77,6 +77,19 @@ async function run() {
     });
 
 
+// my course section
+    app.get('/my-courses', async (req, res) => {
+      const email = req.query.email;
+
+      if (!email) {
+        return res.status(400).send({ message: "Email is required" });
+      }
+
+      const userCourses = await courseCollection.find({ instructorEmail: email }).toArray();
+      res.send(userCourses);
+    });
+
+
     // add course
     app.post('/add-course', async (req, res) => {
       const courseData = req.body
