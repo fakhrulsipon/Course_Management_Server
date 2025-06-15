@@ -39,7 +39,7 @@ async function run() {
       const result = await courseCollection.findOne(courseDetails)
       res.send(result)
     })
-    
+
     // check enroll part
     app.get('/check-enroll', async (req, res) => {
       const { email, courseId } = req.query;
@@ -52,6 +52,30 @@ async function run() {
 
       res.send({ enrolled: exists ? true : false });
     });
+
+    // popular courses
+    app.get('/popular-courses', async (req, res) => {
+      const popularEnrollments = await enrollmentCollection.aggregate([
+        { $group: { _id: "$courseId", enrollCount: { $sum: 1 } } },
+        { $sort: { enrollCount: -1 } },
+        { $limit: 4 }
+      ]).toArray();
+
+      const courseIds = popularEnrollments.map(e => new ObjectId(e._id));
+      const courses = await courseCollection.find({ _id: { $in: courseIds } }).toArray();
+
+      const enrollMap = new Map(popularEnrollments.map(e => [e._id.toString(), e.enrollCount]));
+
+      const sortedCourses = courses
+        .map(course => ({
+          ...course,
+          enrollCount: enrollMap.get(course._id.toString()) || 0
+        }))
+        .sort((a, b) => b.enrollCount - a.enrollCount);
+
+      res.send(sortedCourses);
+    });
+
 
     // add course
     app.post('/add-course', async (req, res) => {
