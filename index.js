@@ -114,6 +114,30 @@ async function run() {
       res.send(result);
     });
 
+    // update course
+    app.put('/update-course/:id', async (req, res) => {
+      const id = req.params.id
+      const query = { _id: new ObjectId(id) }
+      const options = { upsert: true };
+      const gardenerTips = req.body
+
+      const updateDoc = {
+        $set: gardenerTips
+      }
+
+      const result = await courseCollection.updateOne(query, updateDoc, options)
+      res.send(result)
+
+    })
+
+    // Delete Course
+    app.delete('/delete-course/:id', async (req, res) => {
+      const id = req.params.id
+      const query = { _id: new ObjectId(id) }
+      const result = await courseCollection.deleteOne(query)
+      res.send(result)
+    })
+
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
     console.log("Pinged your deployment. You successfully connected to MongoDB!");
