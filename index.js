@@ -25,6 +25,12 @@ async function run() {
     await client.connect();
     const courseCollection = client.db("courseDB").collection("courses");
     const enrollmentCollection = client.db("courseDB").collection("enrollments");
+   
+  //  get all courses
+  app.get('/courses', async(req, res) => {
+    const courses = await courseCollection.find().toArray()
+    res.send(courses)
+  })
 
     // get 6 latest course
     app.get('/latest-course', async (req, res) => {
@@ -40,7 +46,7 @@ async function run() {
       res.send(result)
     })
 
-    // check enroll part
+    // check enroll course
     app.get('/check-enroll', async (req, res) => {
       const { email, courseId } = req.query;
 
@@ -77,7 +83,7 @@ async function run() {
     });
 
 
-    // my course section
+    // my add course section
     app.get('/my-courses', async (req, res) => {
       const email = req.query.email;
 
@@ -93,6 +99,7 @@ async function run() {
     // my enrolled courses
     app.get('/enrolled-courses', async (req, res) => {
       const email = req.query.email;
+
       if (!email){
         return res.status(400).send({ message: "Email required" });
       }
@@ -111,7 +118,7 @@ async function run() {
       res.send(result)
     })
 
-    // enroll course
+    //course details a enroll course
     app.post('/enroll', async (req, res) => {
       const enrollmentData = req.body;
 
