@@ -5,8 +5,33 @@ const cors = require('cors')
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const port = process.env.PORT || 3000
 
-app.use(cors())
+app.use(cors({
+  origin: ['https://subscription-box-2faea.web.app', 'http://localhost:5174', 'http://localhost:5173'],
+  credentials: true
+}));
 app.use(express.json())
+
+const admin = require("firebase-admin");
+const decoded = Buffer.from(process.env.FB_SERVICE_KEY, 'base64').toString('utf8')
+const serviceAccount = JSON.parse(decoded);
+// console.log(decoded)
+
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount)
+});
+
+
+const verifyFirebaseToken = async(req, res, next) => {
+  const authHeader = req.headers?.authorization;
+  const token = authHeader.split(' ')[1]
+  if(!token){
+    return res.status(401).send({message: 'unauthorized access'})
+  }
+  const userInfo = await admin.auth().verifyIdToken(token)
+  req.tokenEmail = userInfo.email;
+  // console.log(userInfo)
+  next();
+}
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.zffyl01.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 
@@ -22,15 +47,15 @@ const client = new MongoClient(uri, {
 async function run() {
   try {
     // Connect the client to the server	(optional starting in v4.7)
-    await client.connect();
+    // await client.connect();
     const courseCollection = client.db("courseDB").collection("courses");
     const enrollmentCollection = client.db("courseDB").collection("enrollments");
-   
-  //  get all courses
-  app.get('/courses', async(req, res) => {
-    const courses = await courseCollection.find().toArray()
-    res.send(courses)
-  })
+
+    //  get all courses
+    app.get('/courses', async (req, res) => {
+      const courses = await courseCollection.find().toArray()
+      res.send(courses)
+    })
 
     // get 6 latest course
     app.get('/latest-course', async (req, res) => {
@@ -84,8 +109,12 @@ async function run() {
 
 
     // my add course section
-    app.get('/my-courses', async (req, res) => {
+    app.get('/my-courses', verifyFirebaseToken, async (req, res) => {
       const email = req.query.email;
+
+       if(req.tokenEmail !== email){
+        return res.status(403).send({message: 'forbidden access'})
+      }
 
       if (!email) {
         return res.status(400).send({ message: "Email is required" });
@@ -97,43 +126,79 @@ async function run() {
 
 
     // my enrolled courses
-    app.get('/enrolled-courses', async (req, res) => {
+    app.get('/enrolled-courses', verifyFirebaseToken, async (req, res) => {
       const email = req.query.email;
 
-      if (!email){
+      if(req.tokenEmail !== email){
+        return res.status(403).send({message: 'forbidden access'})
+      }
+
+      if (!email) {
         return res.status(400).send({ message: "Email required" });
       }
 
       const enrolledCourses = await enrollmentCollection.find({ email: email }).toArray();
-      
+
       const courseIds = enrolledCourses.map(enroll => new ObjectId(enroll.courseId))
-      const courses = await courseCollection.find({_id: {$in: courseIds}}).toArray()
+      const courses = await courseCollection.find({ _id: { $in: courseIds } }).toArray()
       res.send(courses)
     });
 
     // add course
     app.post('/add-course', async (req, res) => {
       const courseData = req.body
+      courseData.availableSeats = parseInt(courseData.availableSeats) || 0;
       const result = await courseCollection.insertOne(courseData)
       res.send(result)
     })
 
     //course details a enroll course
+    // app.post('/enroll', async (req, res) => {
+    //   const enrollmentData = req.body;
+
+    //   const exists = await enrollmentCollection.findOne({
+    //     email: enrollmentData.email,
+    //     courseId: enrollmentData.courseId
+    //   });
+
+    //   if (exists) {
+    //     return res.status(400).send({ message: 'Already Enrolled' });
+    //   }
+
+    //   const result = await enrollmentCollection.insertOne(enrollmentData);
+    //   res.send(result);
+    // });
+
+
+ //course details a enroll course
     app.post('/enroll', async (req, res) => {
-      const enrollmentData = req.body;
+  const { email, courseId } = req.body;
+  
+  if (!email || !courseId)
+    return res.status(400).send({ message: "Email and courseId are required" });
 
-      const exists = await enrollmentCollection.findOne({
-        email: enrollmentData.email,
-        courseId: enrollmentData.courseId
-      });
+  const userEnrollments = await enrollmentCollection.find({ email }).toArray();
+  const enrolledInThisCourse = userEnrollments.some(enroll => enroll.courseId === courseId);
 
-      if (exists) {
-        return res.status(400).send({ message: 'Already Enrolled' });
-      }
+  if (enrolledInThisCourse) {
+    await enrollmentCollection.deleteOne({ email, courseId });
+    await courseCollection.updateOne({ _id: new ObjectId(courseId) }, { $inc: { availableSeats: 1 } });
+    return res.send({ message: 'Enrollment removed successfully' });
+  }
 
-      const result = await enrollmentCollection.insertOne(enrollmentData);
-      res.send(result);
-    });
+  if (userEnrollments.length > 3)
+    return res.status(400).send({ message: 'You can enroll in maximum 3 courses at a time' });
+
+  const course = await courseCollection.findOne({ _id: new ObjectId(courseId) });
+  if (!course) return res.status(404).send({ message: 'Course not found' });
+  if (course.availableSeats <= 0) return res.status(400).send({ message: 'No seats left in this course' });
+
+  await courseCollection.updateOne({ _id: new ObjectId(courseId) }, { $inc: { availableSeats: -1 } });
+  const result = await enrollmentCollection.insertOne({ email, courseId });
+
+  res.send({ message: 'Enrolled successfully', result });
+});
+
 
     // update course
     app.put('/update-course/:id', async (req, res) => {
@@ -169,8 +234,8 @@ async function run() {
     })
 
     // Send a ping to confirm a successful connection
-    await client.db("admin").command({ ping: 1 });
-    console.log("Pinged your deployment. You successfully connected to MongoDB!");
+    // await client.db("admin").command({ ping: 1 });
+    // console.log("Pinged your deployment. You successfully connected to MongoDB!");
   } finally {
 
   }
