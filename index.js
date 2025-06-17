@@ -152,22 +152,6 @@ async function run() {
       res.send(result)
     })
 
-    //course details a enroll course
-    // app.post('/enroll', async (req, res) => {
-    //   const enrollmentData = req.body;
-
-    //   const exists = await enrollmentCollection.findOne({
-    //     email: enrollmentData.email,
-    //     courseId: enrollmentData.courseId
-    //   });
-
-    //   if (exists) {
-    //     return res.status(400).send({ message: 'Already Enrolled' });
-    //   }
-
-    //   const result = await enrollmentCollection.insertOne(enrollmentData);
-    //   res.send(result);
-    // });
 
 
  //course details a enroll course
