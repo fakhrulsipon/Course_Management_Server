@@ -59,7 +59,7 @@ async function run() {
 
     // get 6 latest course
     app.get('/latest-course', async (req, res) => {
-      const courses = await courseCollection.find().sort({ createdAt: -1 }).limit(6).toArray();
+      const courses = await courseCollection.find().sort({ createdAt: -1 }).limit(8).toArray();
       res.send(courses)
     })
 
