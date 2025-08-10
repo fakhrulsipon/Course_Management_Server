@@ -139,7 +139,7 @@ async function run() {
     app.get('/my-courses', verifyFirebaseToken, async (req, res) => {
       const email = req.query.email;
       const page = parseInt(req.query.page) || 1;
-      const limit = parseInt(req.query.limit) || 5;
+      const limit = parseInt(req.query.limit) || 2;
       const skip = (page - 1) * limit;
 
       if (req.tokenEmail !== email) {
@@ -172,20 +172,41 @@ async function run() {
     // my enrolled courses
     app.get('/enrolled-courses', verifyFirebaseToken, async (req, res) => {
       const email = req.query.email;
+      const page = parseInt(req.query.page) || 1;
+      const limit = parseInt(req.query.limit) || 1;
+      const skip = (page - 1) * limit;
 
       if (req.tokenEmail !== email) {
-        return res.status(403).send({ message: 'forbidden access' })
+        return res.status(403).send({ message: 'forbidden access' });
       }
 
       if (!email) {
         return res.status(400).send({ message: "Email required" });
       }
 
-      const enrolledCourses = await enrollmentCollection.find({ email: email }).toArray();
+      // get total count enrolled courses এর
+      const totalEnrolled = await enrollmentCollection.countDocuments({ email: email });
 
-      const courseIds = enrolledCourses.map(enroll => new ObjectId(enroll.courseId))
-      const courses = await courseCollection.find({ _id: { $in: courseIds } }).toArray()
-      res.send(courses)
+      // pagination অনুসারে enrollment data
+      const enrolledCourses = await enrollmentCollection
+        .find({ email: email })
+        .skip(skip)
+        .limit(limit)
+        .toArray();
+
+      // enrolled course IDs get
+      const courseIds = enrolledCourses.map(enroll => new ObjectId(enroll.courseId));
+
+      //courseIds দিয়ে courseCollection থেকে pagination অনুযায়ী course data get
+      const courses = await courseCollection.find({ _id: { $in: courseIds } }).toArray();
+
+      res.send({
+        total: totalEnrolled,
+        page,
+        limit,
+        totalPages: Math.ceil(totalEnrolled / limit),
+        courses
+      });
     });
 
     // add course
