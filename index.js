@@ -6,7 +6,7 @@ const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const port = process.env.PORT || 3000
 
 app.use(cors({
-  origin: ['https://subscription-box-2faea.web.app', 'http://localhost:5174', 'http://localhost:5173'],
+  origin: ['https://subscription-box-2faea.web.app', 'https://dynamic-vacherin-e4098b.netlify.app/', 'http://localhost:5174', 'http://localhost:5173'],
   credentials: true
 }));
 app.use(express.json())
@@ -47,7 +47,7 @@ const client = new MongoClient(uri, {
 async function run() {
   try {
     // Connect the client to the server	(optional starting in v4.7)
-    await client.connect();
+    // await client.connect();
     const courseCollection = client.db("courseDB").collection("courses");
     const enrollmentCollection = client.db("courseDB").collection("enrollments");
 
@@ -146,7 +146,7 @@ async function run() {
     app.get('/my-courses', verifyFirebaseToken, async (req, res) => {
       const email = req.query.email;
       const page = parseInt(req.query.page) || 1;
-      const limit = parseInt(req.query.limit) || 2;
+      const limit = parseInt(req.query.limit) || 5;
       const skip = (page - 1) * limit;
 
       if (req.tokenEmail !== email) {
