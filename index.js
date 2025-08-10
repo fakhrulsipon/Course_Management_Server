@@ -21,11 +21,11 @@ admin.initializeApp({
 });
 
 
-const verifyFirebaseToken = async(req, res, next) => {
+const verifyFirebaseToken = async (req, res, next) => {
   const authHeader = req.headers?.authorization;
   const token = authHeader.split(' ')[1]
-  if(!token){
-    return res.status(401).send({message: 'unauthorized access'})
+  if (!token) {
+    return res.status(401).send({ message: 'unauthorized access' })
   }
   const userInfo = await admin.auth().verifyIdToken(token)
   req.tokenEmail = userInfo.email;
@@ -51,10 +51,37 @@ async function run() {
     const courseCollection = client.db("courseDB").collection("courses");
     const enrollmentCollection = client.db("courseDB").collection("enrollments");
 
-    //  get all courses
+    // Get all courses with optional price sorting
     app.get('/courses', async (req, res) => {
-      const courses = await courseCollection.find().toArray()
-      res.send(courses)
+      const sortOrder = req.query.sort;
+      const page = parseInt(req.query.page) || 1;
+      const limit = parseInt(req.query.limit) || 5;
+      const skip = (page - 1) * limit;
+
+      let sortQuery = {};
+      if (sortOrder === 'ascending') {
+        sortQuery = { price: 1 }
+      }
+      else if (sortOrder === 'descending') {
+        sortQuery = { price: -1 }
+      }
+
+      const totalCourses = await courseCollection.countDocuments();
+
+      // Main query with sort + skip + limit
+      const courses = await courseCollection
+        .find()
+        .sort(sortQuery)
+        .skip(skip)
+        .limit(limit)
+        .toArray();
+
+      res.send({
+        total: totalCourses,
+        currentPage: page,
+        totalPages: Math.ceil(totalCourses / limit),
+        courses
+      });
     })
 
     // get 6 latest course
@@ -89,7 +116,7 @@ async function run() {
       const popularEnrollments = await enrollmentCollection.aggregate([
         { $group: { _id: "$courseId", enrollCount: { $sum: 1 } } },
         { $sort: { enrollCount: -1 } },
-        { $limit: 4 }
+        { $limit: 8 }
       ]).toArray();
 
       const courseIds = popularEnrollments.map(e => new ObjectId(e._id));
@@ -111,17 +138,34 @@ async function run() {
     // my add course section
     app.get('/my-courses', verifyFirebaseToken, async (req, res) => {
       const email = req.query.email;
+      const page = parseInt(req.query.page) || 1;
+      const limit = parseInt(req.query.limit) || 5;
+      const skip = (page - 1) * limit;
 
-       if(req.tokenEmail !== email){
-        return res.status(403).send({message: 'forbidden access'})
+      if (req.tokenEmail !== email) {
+        return res.status(403).send({ message: 'forbidden access' })
       }
 
       if (!email) {
         return res.status(400).send({ message: "Email is required" });
       }
 
-      const userCourses = await courseCollection.find({ instructorEmail: email }).toArray();
-      res.send(userCourses);
+      const totalMyCourses = await courseCollection.countDocuments({ instructorEmail: email });
+
+      // skip & limit দিয়ে data আনা
+      const userCourses = await courseCollection
+        .find({ instructorEmail: email })
+        .skip(skip)
+        .limit(limit)
+        .toArray();
+
+      res.send({
+        total: totalMyCourses,
+        page,
+        limit,
+        totalPages: Math.ceil(totalMyCourses / limit),
+        courses: userCourses
+      });
     });
 
 
@@ -129,8 +173,8 @@ async function run() {
     app.get('/enrolled-courses', verifyFirebaseToken, async (req, res) => {
       const email = req.query.email;
 
-      if(req.tokenEmail !== email){
-        return res.status(403).send({message: 'forbidden access'})
+      if (req.tokenEmail !== email) {
+        return res.status(403).send({ message: 'forbidden access' })
       }
 
       if (!email) {
@@ -154,34 +198,34 @@ async function run() {
 
 
 
- //course details a enroll course
+    //course details a enroll course
     app.post('/enroll', async (req, res) => {
-  const { email, courseId } = req.body;
-  
-  if (!email || !courseId)
-    return res.status(400).send({ message: "Email and courseId are required" });
+      const { email, courseId } = req.body;
 
-  const userEnrollments = await enrollmentCollection.find({ email }).toArray();
-  const enrolledInThisCourse = userEnrollments.some(enroll => enroll.courseId === courseId);
+      if (!email || !courseId)
+        return res.status(400).send({ message: "Email and courseId are required" });
 
-  if (enrolledInThisCourse) {
-    await enrollmentCollection.deleteOne({ email, courseId });
-    await courseCollection.updateOne({ _id: new ObjectId(courseId) }, { $inc: { availableSeats: 1 } });
-    return res.send({ message: 'Enrollment removed successfully' });
-  }
+      const userEnrollments = await enrollmentCollection.find({ email }).toArray();
+      const enrolledInThisCourse = userEnrollments.some(enroll => enroll.courseId === courseId);
 
-  if (userEnrollments.length > 3)
-    return res.status(400).send({ message: 'You can enroll in maximum 3 courses at a time' });
+      if (enrolledInThisCourse) {
+        await enrollmentCollection.deleteOne({ email, courseId });
+        await courseCollection.updateOne({ _id: new ObjectId(courseId) }, { $inc: { availableSeats: 1 } });
+        return res.send({ message: 'Enrollment removed successfully' });
+      }
 
-  const course = await courseCollection.findOne({ _id: new ObjectId(courseId) });
-  if (!course) return res.status(404).send({ message: 'Course not found' });
-  if (course.availableSeats <= 0) return res.status(400).send({ message: 'No seats left in this course' });
+      if (userEnrollments.length > 3)
+        return res.status(400).send({ message: 'You can enroll in maximum 3 courses at a time' });
 
-  await courseCollection.updateOne({ _id: new ObjectId(courseId) }, { $inc: { availableSeats: -1 } });
-  const result = await enrollmentCollection.insertOne({ email, courseId });
+      const course = await courseCollection.findOne({ _id: new ObjectId(courseId) });
+      if (!course) return res.status(404).send({ message: 'Course not found' });
+      if (course.availableSeats <= 0) return res.status(400).send({ message: 'No seats left in this course' });
 
-  res.send({ message: 'Enrolled successfully', result });
-});
+      await courseCollection.updateOne({ _id: new ObjectId(courseId) }, { $inc: { availableSeats: -1 } });
+      const result = await enrollmentCollection.insertOne({ email, courseId });
+
+      res.send({ message: 'Enrolled successfully', result });
+    });
 
 
     // update course
