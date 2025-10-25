@@ -8,6 +8,7 @@ const port = process.env.PORT || 3000;
 
 // CORS configuration - Define ONCE
 const allowedOrigins = [
+    "coursemanagementserver-production.up.railway.app",
     "https://dynamic-vacherin-e4098b.netlify.app",
     "http://localhost:5174",
     "http://localhost:5173",
@@ -100,7 +101,7 @@ async function run() {
     io.on("connection", (socket) => {
       console.log("A user connected:", socket.id);
 
-      // ইউজার যখন কোর্স রুমে জয়েন করে - CORRECTED VERSION
+      // When a user joins a course room - CORRECTED VERSION
       socket.on("join_course_room", (data) => {
         try {
           const courseId = data.courseId || data;
@@ -170,7 +171,7 @@ async function run() {
           const result = await messagesCollection.insertOne(messageData);
           const savedMessage = { ...messageData, _id: result.insertedId };
 
-          // সবাইকে মেসেজ দেখান (Admin + User)
+          // all user see the message
           io.to(courseId).emit("receive_message", savedMessage);
         } catch (error) {
           console.error("Error saving message:", error);
@@ -182,7 +183,7 @@ async function run() {
       });
     });
 
-    // Get messages for a course - শুধুমাত্র অ্যাডমিন এবং মেসেজের মালিক দেখতে পারবে
+    // Get messages for a course - Only admins and message owners can view
     app.get(
       "/course-messages/:courseId",
       verifyFirebaseToken,
@@ -198,17 +199,17 @@ async function run() {
 
           let query = { courseId };
 
-          // Admin না হলে শুধুমাত্র প্রাসঙ্গিক মেসেজ দেখাবে
+          // Only relevant messages will be shown if not admin
           if (user.userRole !== "admin") {
             query = {
               courseId,
               $or: [
-                { userEmail: userEmail }, // নিজের মেসেজ
+                { userEmail: userEmail },
                 {
                   isAdminMessage: true,
                   $or: [{ toUser: null }, { toUser: userEmail }],
-                }, // Admin এর সাধারণ বা নিজের জন্য মেসেজ
-                { toUser: userEmail }, // নিজের জন্য specifically পাঠানো মেসেজ
+                }, 
+                { toUser: userEmail },
               ],
             };
           }
@@ -227,26 +228,24 @@ async function run() {
       }
     );
 
-    // Message delete endpoint - শুধুমাত্র অ্যাডমিন বা মেসেজের মালিক ডিলিট করতে পারবে
+    // Message delete endpoint 
     app.delete(
       "/course-messages/:messageId",
       verifyFirebaseToken,
       async (req, res) => {
         try {
           const { messageId } = req.params;
-          const userEmail = req.tokenEmail; // Firebase token থেকে ইমেল পাবেন
+          const userEmail = req.tokenEmail; 
 
           const db = client.db("courseDB");
           const messagesCollection = db.collection("course_messages");
           const userCollection = db.collection("users");
 
-          // প্রথমে ইউজারের রোল চেক করুন
           const user = await userCollection.findOne({ userEmail: userEmail });
           if (!user) {
             return res.status(404).json({ error: "User not found" });
           }
 
-          // মেসেজ খুঁজে বের করুন
           const message = await messagesCollection.findOne({
             _id: new ObjectId(messageId),
           });
@@ -255,19 +254,16 @@ async function run() {
             return res.status(404).json({ error: "Message not found" });
           }
 
-          // চেক করুন: ইউজার অ্যাডমিন কি না অথবা মেসেজের মালিক কি না
           if (user.userRole !== "admin" && message.userEmail !== userEmail) {
             return res.status(403).json({
               error: "You are not authorized to delete this message",
             });
           }
 
-          // মেসেজ ডিলিট করুন
           const result = await messagesCollection.deleteOne({
             _id: new ObjectId(messageId),
           });
 
-          // সকেটের মাধ্যমে বাকিদের জানান যে মেসেজ ডিলিট হয়েছে
           io.to(message.courseId).emit("message_deleted", messageId);
 
           res.json({
@@ -441,7 +437,7 @@ async function run() {
         instructorEmail: email,
       });
 
-      // skip & limit দিয়ে data আনা
+      //useing skip & limit get data
       const userCourses = await courseCollection
         .find({ instructorEmail: email })
         .skip(skip)
@@ -558,7 +554,7 @@ async function run() {
       }
     });
 
-    // Admin এর জন্য একটি কোর্সের সব মেসেজ দেখার API
+    // API for admin to view all messages in a course
     app.get(
       "/admin/course-messages/:courseId",
       verifyFirebaseToken,
@@ -587,7 +583,7 @@ async function run() {
       }
     );
 
-    // Admin এর জন্য মেসেজ পাঠানোর API
+    // API for sending messages for admin
     app.post("/admin/send-message", verifyFirebaseToken, async (req, res) => {
       try {
         const { courseId, userEmail, userName, userPhoto, message, toUser } =
@@ -612,7 +608,7 @@ async function run() {
         const result = await messagesCollection.insertOne(messageData);
         const savedMessage = { ...messageData, _id: result.insertedId };
 
-        // Socket এর মাধ্যমে মেসেজ পাঠান
+        // Sending messages useing Socket.io
         io.to(courseId).emit("receive_message", savedMessage);
 
         res.json({
